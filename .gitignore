@@ -135,3 +135,8 @@ Data_TB/
 Experiments/
 model_outputs
 src/wandb
+
+.vscode/
+**/__pycache__
+
+######
