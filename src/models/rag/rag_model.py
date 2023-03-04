@@ -39,16 +39,16 @@ class RagModel(pl.LightningModule):
         # Initialising question encoder
         QueryEncoderModelClass = globals()[self.config.model_config.QueryEncoderModelClass]
         QueryEncoderConfigClass = globals()[self.config.model_config.QueryEncoderConfigClass]
-        question_encoder_model_config = QueryEncoderConfigClass.from_pretrained(self.config.model_config.QueryEncoderModelVersion)
-        self.question_encoder = QueryEncoderModelClass.from_pretrained(self.config.model_config.QueryEncoderModelVersion,
+        question_encoder_model_config = QueryEncoderConfigClass.from_pretrained(self.config.model_config.QueryEncoderModelVersion, cache_dir="../public") #, cache_dir="../public"
+        self.question_encoder = QueryEncoderModelClass.from_pretrained(self.config.model_config.QueryEncoderModelVersion, cache_dir="../public",
                                                     config=question_encoder_model_config)
         self.retiever_hidden_size = question_encoder_model_config.hidden_size
 
         # Initialising generator
         GeneratorModelClass = globals()[self.config.model_config.GeneratorModelClass]
         GeneratorConfigClass = globals()[self.config.model_config.GeneratorConfigClass]
-        generator_model_config = GeneratorConfigClass.from_pretrained(self.config.model_config.GeneratorModelVersion)
-        self.generator = GeneratorModelClass.from_pretrained(self.config.model_config.GeneratorModelVersion,
+        generator_model_config = GeneratorConfigClass.from_pretrained(self.config.model_config.GeneratorModelVersion, cache_dir="../public")
+        self.generator = GeneratorModelClass.from_pretrained(self.config.model_config.GeneratorModelVersion, cache_dir="../public",
                                                     config=generator_model_config)
         
         self.question_encoder.resize_token_embeddings(len(self.retriever_tokenizer))
@@ -66,11 +66,12 @@ class RagModel(pl.LightningModule):
             self.retrieve = self.main_retrieve
     
     def init_retrieval(self):
+
         if 'read_static_retrieval_results' in self.config.model_config.modules:
             # Load static retrieval results
             self.questionId2topPassages = self.data_loader.data.vqa_data_with_dpr_output.questionId2topPassages.copy()
             return
-        
+   
         if self.config.data_loader.index_files.index_passages_path == '':
             # use wikidata
             self.index = CanonicalHFIndex(
@@ -83,12 +84,14 @@ class RagModel(pl.LightningModule):
             )
             self.data_source = 'wiki'
         else:
+
             # use GS corpus
             self.index = CustomHFIndex.load_from_disk(
                 vector_size=self.retiever_hidden_size,
                 dataset_path=self.config.data_loader.index_files.index_passages_path,
                 index_path=self.config.data_loader.index_files.index_path,
             )
+
             self.data_source = 'gs'
         print("initializing retrieval")
         self.index.init_index()
@@ -131,6 +134,7 @@ class RagModel(pl.LightningModule):
 
         start_time = time.time()
         ids, vectors = self.index.get_top_docs(question_hidden_states.cpu().detach().numpy(), n_docs)
+
         # print(
         #     f"index search time: {time.time() - start_time} sec, batch size {question_hidden_states.shape}"
         # )
@@ -261,6 +265,7 @@ class RagModel(pl.LightningModule):
                     ' '.join([input_text_sequence, doc['content']])
                 )
                 scores.append(doc['score'])
+        
 
         targets = labels
 
@@ -410,9 +415,9 @@ class RagModel(pl.LightningModule):
 
         if 'majority_voting' in self.config.model_config.modules:
             # Try majority voting!
-            # print(generation_outputs.shape)
 
             generation_outputs_decoded = self.generator_tokenizer.batch_decode(generation_outputs, skip_special_tokens=True)
+
             generation_outputs = generation_outputs.reshape(batch_size, n_docs, -1)
             
 
@@ -496,7 +501,6 @@ class RagModel(pl.LightningModule):
                     generation_outputs_for_docs.append(answer_proposals)
                     outputs.append(generation_outputs[b, top_cand_inds])
 
-
                 outputs = torch.cat(outputs)
                 
 
@@ -525,17 +529,20 @@ class RagModel(pl.LightningModule):
                 # loss --> -log(p(y|x, z))
                 # -log(g(z)p(y|x, z)) = -doc_scores + loss
                 # batch_size x n_docs + batch_size x n_docs
+                
                 doc_scores_log = -F.log_softmax(doc_scores, dim=-1)
                 loss_with_doc_scores = doc_scores_log + (loss.sum(-1))
 
                 for b in range(batch_size):
                     # use topk to get indices of top candidates
                     top_cand_inds = (-loss_with_doc_scores[b]).topk(1)[1]
+
                     outputs.append(generation_outputs[b, top_cand_inds])
                     answer_proposals = generation_outputs_decoded[b*n_docs:(b+1)*n_docs]
                     generation_outputs_for_docs.append(answer_proposals)
                     # print(-loss[b])
                     # print(answer_proposals)
+
                 outputs = torch.cat(outputs)
 
         return EasyDict(outputs=outputs, 

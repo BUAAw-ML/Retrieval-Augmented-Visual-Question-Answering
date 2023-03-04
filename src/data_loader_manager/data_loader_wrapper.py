@@ -30,7 +30,7 @@ class DataLoaderWrapper():
 
         # Prepare for tokenizers
         TokenizerClass = globals()[self.config.model_config.TokenizerClass]
-        self.tokenizer = TokenizerClass.from_pretrained(self.config.model_config.TokenizerModelVersion)
+        self.tokenizer = TokenizerClass.from_pretrained(self.config.model_config.TokenizerModelVersion)##,local_files_only=True #, cache_dir='/share/group/datanlpr4/qbwang/cache'
         self.SPECIAL_TOKENS = self.config.model_config.SPECIAL_TOKENS
         self.SPECIAL_TOKENS['additional_special_tokens'] = self.tokenizer.additional_special_tokens + self.SPECIAL_TOKENS['additional_special_tokens']
         
@@ -39,7 +39,7 @@ class DataLoaderWrapper():
         # Load second tokenizer if specified
         if self.config.model_config.get('DecoderTokenizerClass', None) is not None:
             DecoderTokenizerClass = globals()[self.config.model_config.DecoderTokenizerClass]
-            self.decoder_tokenizer = DecoderTokenizerClass.from_pretrained(self.config.model_config.DecoderTokenizerModelVersion)
+            self.decoder_tokenizer = DecoderTokenizerClass.from_pretrained(self.config.model_config.DecoderTokenizerModelVersion)#, local_files_only=True
             self.DECODER_SPECIAL_TOKENS = self.config.model_config.DECODER_SPECIAL_TOKENS
             self.DECODER_SPECIAL_TOKENS['additional_special_tokens'] = self.decoder_tokenizer.additional_special_tokens + self.DECODER_SPECIAL_TOKENS['additional_special_tokens']
             self.decoder_tokenizer.add_special_tokens(self.DECODER_SPECIAL_TOKENS)
@@ -51,7 +51,7 @@ class DataLoaderWrapper():
         if self.config.model_config.get('FeatureExtractorClass', None) is not None:
             # Load image feature extractor
             FeatureExtractorClass = globals()[self.config.model_config.FeatureExtractorClass]
-            self.feature_extractor = FeatureExtractorClass.from_pretrained(self.config.model_config.FeatureExtractorModelVersion)
+            self.feature_extractor = FeatureExtractorClass.from_pretrained(self.config.model_config.FeatureExtractorModelVersion)#, local_files_only=True
         else:
             self.feature_extractor = None
 

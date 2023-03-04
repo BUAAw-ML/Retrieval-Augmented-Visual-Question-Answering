@@ -30,7 +30,8 @@ def split_documents(documents: dict) -> dict:
     for title, text in zip(documents["title"], documents["text"]):
         if text is not None:
             # for passage in split_text(text):
-            titles.append(title if title is not None else "")
+            titles.append("")
+            # titles.append(title if title is not None else "")
             texts.append(text)
     return {"title": titles, "text": texts}
 
@@ -69,7 +70,7 @@ def main(
         "csv", data_files=[rag_example_args.csv_path], split="train", delimiter=",", column_names=["title", "text"], skiprows=1
     )
     # More info about loading csv files in the documentation: https://huggingface.co/docs/datasets/loading_datasets.html?highlight=csv#csv-files
-    
+
 
     # Then split the documents into passages of 100 words
     dataset = dataset.map(split_documents, batched=True, num_proc=processing_args.num_proc)

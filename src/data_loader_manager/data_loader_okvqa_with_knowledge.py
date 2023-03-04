@@ -386,6 +386,10 @@ class DataLoaderOKVQAWithKnowledge(DataLoaderOKVQA):
         # for i in self.train_dataloader:
         #     print(i)
         #     input()
+        # print(self.data.vqa_data.test)
+        # print(self.data.vqa_data.test.keys())
+        # print(self.data.keys())
+
 
         test_dataset_dict = {
             'data': self.data.vqa_data.test if 'vqa_data_with_dpr_output' not in self.data.keys() \
@@ -411,6 +415,7 @@ class DataLoaderOKVQAWithKnowledge(DataLoaderOKVQA):
         # for i in self.test_dataloader:
         #     print(i)
         #     input()
+
         logger.info('[Data Statistics]: training data loader: {};  test data loader: {}'.format(
                                 len(self.train_dataloader), 
                                 len(self.test_dataloader)))

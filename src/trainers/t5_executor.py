@@ -201,10 +201,11 @@ class T5Executor(BaseExecutor):
             if bos_token_id in output_sequence:
                 output_sequence = output_sequence[output_sequence.index(bos_token_id):]
 
-            # print('output_sequence after', output_sequence)
+            # print('output_sequence after', output_sequence) #output_sequence after [0, 32099, 363, 2600, 103, 25, 577, 58, 32098, 1001]   
             decoded_output = self.decoder_tokenizer.decode(output_sequence, skip_special_tokens=True)
             actual_output = self.decoder_tokenizer.decode(output_sequence, skip_special_tokens=False)
-            # print(self.tokenizer.decode(cleaned_i, skip_special_tokens=True))
+            # print(self.tokenizer.decode(cleaned_i, skip_special_tokens=True)) #What sport do you play? black 
+
             
             if batch_idx < 10:
                 print(decoded_label, '<--->', decoded_output, '   ({})'.format(actual_output))

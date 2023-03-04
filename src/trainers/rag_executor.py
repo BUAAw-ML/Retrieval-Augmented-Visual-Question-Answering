@@ -38,6 +38,7 @@ class RagExecutor(BaseExecutor):
         
         self.train_data_loader = self.data_loader.train_dataloader
         self.test_data_loader = self.data_loader.test_dataloader
+        self.predict_data_loader = None if not hasattr(self.data_loader, 'predict_dataloader') else self.data_loader.predict_dataloader
 
         self.tokenizer = data_loader.tokenizer
         self.decoder_tokenizer = data_loader.decoder_tokenizer
@@ -172,13 +173,22 @@ class RagExecutor(BaseExecutor):
         self.logging_results(log_dict)
         return log_dict
     
-    def test_step(self, sample_batched, batch_idx):
+    def test_step(self, sample_batched, batch_idx):        
         return self._generative_step(sample_batched, batch_idx)
-
+    
     def test_epoch_end(self, validation_step_outputs):
         log_dict = self.evaluate_outputs(validation_step_outputs)
         self.logging_results(log_dict, prefix=self.config.test.evaluation_name)
         return log_dict
+
+
+    def predict_step(self, sample_batched, batch_idx, dataloader_idx=0):
+        # text, img -> sample_batched, batch_idx
+
+        result = self._generative_step(sample_batched, batch_idx)
+
+        # result -》 answer, knowledge_passages
+        return result
 
     def _generative_step(self, sample_batched, batch_idx):
         """
@@ -201,11 +211,10 @@ class RagExecutor(BaseExecutor):
         retrieved_docs = generation_outputs.retrieved_docs
         generation_outputs_for_docs = generation_outputs.generation_outputs_for_docs
         loss_with_doc_scores = generation_outputs.loss_with_doc_scores
-        
 
         bos_token_id = self.data_loader.decoder_tokenizer.bos_token_id
-        for index, i in enumerate(labels):
 
+        for index, i in enumerate(labels):
             cleaned_i = [label if label!=-100 else self.decoder_tokenizer.pad_token_id for label in i]
             cleaned_i = torch.LongTensor(cleaned_i)
             decoded_label = self.decoder_tokenizer.decode(cleaned_i, skip_special_tokens=True)

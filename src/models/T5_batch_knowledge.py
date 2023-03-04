@@ -34,7 +34,7 @@ from transformers import (
     HammingDiversityLogitsProcessor,
     BeamSearchScorer,
 )
-from models.MLP_layers import MultiLayerPerceptron
+# from models.MLP_layers import MultiLayerPerceptron
 # Warning message for FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
 __HEAD_MASK_WARNING_MSG = """
 The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,

@@ -81,9 +81,12 @@ class DataLoaderOKVQA(DataLoaderWrapper):
                     read_tsv = csv.reader(csv_file, delimiter="\t")
 
                     for row in tqdm(read_tsv, total=count_total):
+
+
                         image_key, prediction = row
+                                               
                         prediction = json.loads(prediction)
-                        # print(image_key)
+
                         # print(prediction.keys())
                         self.data.vinvl_features[image_key] = prediction
                         # for obj in prediction['objects']:
@@ -115,14 +118,19 @@ class DataLoaderOKVQA(DataLoaderWrapper):
         #   Read OCR data and combine with VinVL features
         ######################
         self.data.ocr_features = load_cached_data(self.config, 'ocr_feature_preprocessed')
+
+
         if not self.data.ocr_features:
             self.data.ocr_features = EasyDict()
             for data_split in ['train', 'test']:
                 # Read pre-extracted features
                 ocr_feature_path = module_config.config[data_split]
                 logger.info(f'Reading data in: {ocr_feature_path}')
+
                 for image_key, prediction in tqdm(self.data.vinvl_features.items()):
+                    
                     ocr_feature_file = os.path.join(ocr_feature_path, '{}_ocr.json'.format(image_key))
+
                     if os.path.exists(ocr_feature_file):
                         with open(ocr_feature_file, 'r') as json_fp:
                             ocr_data = json.load(json_fp)

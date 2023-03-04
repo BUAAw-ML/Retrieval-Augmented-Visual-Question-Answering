@@ -79,6 +79,9 @@ class BaseExecutor(pl.LightningModule, MetricsProcessor):
     
     def test_dataloader(self):
         return self.data_loader.test_dataloader
+    
+    def predict_dataloader(self):
+        return self.data_loader.predict_dataloader
 
     def forward(self, **kwargs):
         return self.model(**kwargs)
