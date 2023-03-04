@@ -1,8 +1,11 @@
 local base_env = import 'base_env.jsonnet';
 
 local train_batch_size = 32;
+//32;
 local valid_batch_size = 32;
+//32;
 local test_batch_size = 32;
+//32;
 local valid_step_size = 100;
 local save_interval = 1;
 local break_interval = 3000;

@@ -60,7 +60,8 @@ for mode in ['train', 'valid']:
     print('total imgs related to this set:', len(img_list))
 
     for imgId, img_p in tqdm(img_list):
-        img_key = img_p.split('.')[0].split('_')[-1]
+        # img_key = img_p.split('.')[0].split('_')[-1]
+        img_key = img_p.split('.')[-2].split('_')[-1]
         img_path = img_p
         img = cv2.imread(img_path)
         img_encoded_str = base64.b64encode(cv2.imencode('.jpg', img)[1])

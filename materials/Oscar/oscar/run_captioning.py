@@ -10,7 +10,8 @@ import torch
 import torch.distributed as dist
 from torch.utils.data import Dataset
 from tqdm import tqdm
-
+import sys
+sys.path.append(os.getcwd())
 from oscar.utils.logger import setup_logger
 from oscar.utils.tsv_file import TSVFile
 from oscar.utils.tsv_file_ops import (tsv_writer, concat_tsv_files,

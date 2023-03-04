@@ -1,4 +1,6 @@
 # Copyright (c) 2020 Microsoft Corporation. Licensed under the MIT license. 
+import sys,os
+sys.path.append(os.getcwd())
 
 from collections import OrderedDict, defaultdict
 import json
@@ -12,8 +14,10 @@ import tempfile
 import time
 from typing import Dict, Optional
 
-from coco_caption.pycocotools.coco import COCO
-from coco_caption.pycocoevalcap.eval import COCOEvalCap
+from pycocotools.coco import COCO
+from pycocoevalcap.eval import COCOEvalCap
+# from coco_caption.pycocotools.coco import COCO
+# from coco_caption.pycocoevalcap.eval import COCOEvalCap
 from .cider.pyciderevalcap.ciderD.ciderD import CiderD
 
 

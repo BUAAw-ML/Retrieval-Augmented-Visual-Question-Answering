@@ -19,7 +19,7 @@ local warmup_steps = 0;
 local seed=2021;
 
 // data path configuration
-local wandb_cache_dir = ''; //'/home/wl356/rds/rds-wjb31-nmt2020/wl356/wandb_cache';
+local wandb_cache_dir = ''; //'./wandb_cache';
 local default_cache_folder = '../data/ok-vqa/cache';
 local vqa_data = {
   "question_files":{
@@ -54,8 +54,10 @@ local passage_data = {
   "full": "../data/ok-vqa/pre-extracted_features/passages/okvqa_full_corpus.csv",
 };
 local pretrained_dpr_features = {
-  "train": "../Experiments/Knowledge_Retriever_DPR_dim_768_inbatch_negative_caption_FullCorpus_NewRun/test/test_evaluation/train_predictions.json",
-  "test": "../Experiments/Knowledge_Retriever_DPR_dim_768_inbatch_negative_caption_FullCorpus_NewRun/test/test_evaluation/test_predictions.json",
+//  "train": "../Experiments/Knowledge_Retriever_DPR_dim_768_inbatch_negative_caption_FullCorpus_NewRun/test/test_evaluation/train_predictions.json",
+//  "test": "../Experiments/Knowledge_Retriever_DPR_dim_768_inbatch_negative_caption_FullCorpus_NewRun/test/test_evaluation/test_predictions.json",
+  "train": "/share/group/datanlpr4/qbwang/Retrieval-Augmented-Visual-Question-Answering/Experiments/OKVQA_DPR_FullCorpus/test/generate_train_set/generate_train_set_predictions.json",
+  "test": "/share/group/datanlpr4/qbwang/Retrieval-Augmented-Visual-Question-Answering/Experiments/OKVQA_DPR_FullCorpus/test/generate_test_set/generate_test_set_predictions.json",
 };
 local dpr_training_annotations = {
   "train": "../data/ok-vqa/pre-extracted_features/passages/retriever_train.json",
@@ -70,8 +72,8 @@ local dpr_training_annotations = {
   "TENSORBOARD_FOLDER": "",
   "WANDB": {
     "CACHE_DIR":  wandb_cache_dir,
-    "entity": "weizhelin",
-    "project": "VQA_publication",
+    "entity": "kmm",
+    "project": "ravqa",
     "tags": ["OKVQA"],
   },
   "platform_type": "pytorch",

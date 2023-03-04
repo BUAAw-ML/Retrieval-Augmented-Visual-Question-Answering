@@ -18,7 +18,7 @@ local override = {
     },
   },
   "data_loader": {
-    "type": "DataLoaderOKVQAWithKnowledge",
+    "type": "PredictDataLoaderOKVQAWithKnowledge",
     "dataset_type": "OKVQADataset",
     "dummy_dataloader": 0,
     "additional":{
