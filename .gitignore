@@ -136,7 +136,7 @@ Experiments/
 model_outputs
 src/wandb
 
-.vscode/
+# .vscode/
 **/__pycache__
 
 ######
