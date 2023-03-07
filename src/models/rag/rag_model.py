@@ -20,6 +20,8 @@ from transformers import DPRQuestionEncoder, DPRContextEncoder, DPRConfig
 from transformers import BertModel, BertConfig
 from transformers.models.rag.retrieval_rag import CustomHFIndex, CanonicalHFIndex
 import pytorch_lightning as pl
+import numpy as np
+import torch.nn.functional as F
 
 import time
 
@@ -64,7 +66,17 @@ class RagModel(pl.LightningModule):
             self.retrieve = self.static_retrieve
         else:
             self.retrieve = self.main_retrieve
+
+        # self.num_attention_heads = 12
+        # self.hidden_size = 1024
+        # self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
+        # self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        # self.query = nn.Linear(self.hidden_size, self.all_head_size)
+        # self.key = nn.Linear(self.hidden_size, self.all_head_size)
+        # self.value = nn.Linear(self.hidden_size, self.all_head_size)
     
+
     def init_retrieval(self):
 
         if 'read_static_retrieval_results' in self.config.model_config.modules:
@@ -279,13 +291,126 @@ class RagModel(pl.LightningModule):
         generator_attention_mask = generator_attention_mask.to(labels.device)
         generator_decoder_input_ids = self.generator._shift_right(targets)
 
+        encoding_embeddings = self.generator.get_input_embeddings()(encoding.input_ids.to(labels.device))
+
         return EasyDict(
             generator_input_text_sequences=extended_input_text_sequences,
             generator_input_ids=generator_input_ids,
+            generator_input_embeddings=encoding_embeddings,
             generator_attention_mask=generator_attention_mask,
             generator_decoder_input_ids=generator_decoder_input_ids,
             generator_labels=targets,
         )
+
+    def prepare_inputs_for_generator_by_preprocessDoc(self, 
+                input_text_sequences, retrieved_docs, labels, n_docs=None):
+    
+
+        if n_docs is None:
+            n_docs = self.config.data_loader.additional.num_knowledge_passages
+        
+        batch_size = len(input_text_sequences)
+        
+        extended_input_text_sequences = []
+
+        for index, input_text_sequence in enumerate(input_text_sequences):
+            scores = []
+            for doc in retrieved_docs[index]:
+                extended_input_text_sequences.append(
+                    ' '.join([input_text_sequence, doc['content']])
+                )
+                scores.append(doc['score'])
+        
+        def transpose_for_scores(x):
+            new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+            x = x.view(*new_x_shape)
+            return x.permute(0, 2, 1, 3)
+
+        encoding = self.generator_tokenizer([sequence for sequence in extended_input_text_sequences],
+            padding='longest',
+            max_length=self.config.data_loader.additional.max_decoder_source_length, # - len(input_text_sequences[0])
+            truncation=True,
+            return_tensors="pt")
+
+        knowledge_mask = encoding.attention_mask
+        input_text_ids = self.generator_tokenizer.convert_tokens_to_ids(self.generator_tokenizer.tokenize(input_text_sequences[0]))
+        knowledge_mask[:,:len(input_text_ids)] = 0
+        knowledge_mask = knowledge_mask.to(labels.device).unsqueeze(-2).unsqueeze(-2)
+
+        input_text_ids = torch.tensor(np.array(input_text_ids))
+        input_text_embeddings = self.generator.get_input_embeddings()(input_text_ids.to(labels.device))
+        input_text_embedding = torch.mean(input_text_embeddings,-2)
+        encoding_embeddings = self.generator.get_input_embeddings()(encoding.input_ids.to(labels.device)) #[docs_num, L, 1024]
+
+        query_layer = transpose_for_scores(self.query(input_text_embedding.unsqueeze(0).unsqueeze(0))) #[1,12,1,]
+        key_layer = transpose_for_scores(self.key(encoding_embeddings))#[5,12,L,]
+        value_layer = encoding_embeddings#[5,L,1024]
+
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores2 = attention_scores.masked_fill((1 - knowledge_mask.byte()).bool(), torch.tensor(-np.inf).to(labels.device)) #[5,12,1,L]
+        
+        attention_probs = nn.Softmax(dim=-1)(attention_scores2) #[5,12,1,L]
+
+        attention_probs2 = attention_probs.clone()
+        attention_probs2[:,:,:,:len(input_text_ids)] = 1
+        attention_probs2 = attention_probs2.mean(-3).transpose(-1, -2)  #[5,L,1]
+        # print(attention_probs2.sum(-2))
+        
+        output_embeddings = attention_probs2 * value_layer
+
+        # extended_input_text_sequences = []
+        # extended_input_text_sequences.extend(input_text_sequences)
+
+        # for index, _ in enumerate(input_text_sequences):
+        #     for doc in retrieved_docs[index]:
+        #         extended_input_text_sequences.extend([doc['content']])
+        # print(extended_input_text_sequences)
+       # Get encoder outputs first
+        # test_batch = EasyDict({
+        #     'input_ids': encoding.input_ids.to(labels.device),
+        #     'attention_mask': encoding.attention_mask.to(labels.device),
+        #     'return_dict': True,
+        # })
+        # print(encoding.input_ids)
+        # print(encoding.attention_mask)
+        # encoder_outputs = self.generator.encoder(
+        #     **test_batch
+        # )
+
+        # input_hidden_state = encoder_outputs.last_hidden_state[0] #shape[L,1024]
+        # docs_hidden_state = encoder_outputs.last_hidden_state[1:] #
+
+        # print(input_hidden_state.shape)
+        # print(torch.mean(input_hidden_state,0).shape)
+
+        # # shape[5,250,1024] shape[1024]
+        # # attention = torch.matmul(docs_hidden_state, torch.mean(input_hidden_state,0))
+        # masks = encoding.attention_mask[1:,:].to(labels.device)
+        # print(masks.shape)
+        # print(torch.matmul(docs_hidden_state, torch.mean(input_hidden_state,0)).shape)
+        # attention = (torch.matmul(docs_hidden_state, torch.mean(input_hidden_state,0))).masked_fill(1 - masks.byte(), torch.tensor(-np.inf).to(labels.device))
+        # attention = F.softmax(attention, -1)
+        # print(attention)
+        # print(attention.shape)
+        # # print(encoder_outputs)
+        # exit()
+
+        targets = labels
+
+        generator_input_ids, generator_attention_mask = encoding.input_ids, encoding.attention_mask
+        generator_input_ids = generator_input_ids.to(labels.device)
+        generator_attention_mask = generator_attention_mask.to(labels.device)
+        generator_decoder_input_ids = self.generator._shift_right(targets)
+
+        return EasyDict(
+            generator_input_text_sequences=extended_input_text_sequences,
+            generator_input_ids=generator_input_ids,
+            generator_input_embeddings=output_embeddings,
+            generator_attention_mask=attention_probs2.squeeze(-1),#generator_attention_mask,
+            generator_decoder_input_ids=generator_decoder_input_ids,
+            generator_labels=targets,
+        )
+
 
     def forward(self, input_ids: torch.Tensor,
                       attention_mask: torch.Tensor,
@@ -330,14 +455,18 @@ class RagModel(pl.LightningModule):
         generator_inputs = self.prepare_inputs_for_generator(input_text_sequences=input_text_sequences,
                                             retrieved_docs=retrieved_docs,
                                             labels=labels, n_docs=n_docs)
+        # generator_inputs = self.prepare_inputs_for_generator_by_preprocessDoc(input_text_sequences=input_text_sequences,
+        #                             retrieved_docs=retrieved_docs,
+        #                             labels=labels, n_docs=n_docs)
         
-        
+   
         generator_outputs = self.generator(
                             input_ids=generator_inputs.generator_input_ids,
+                            # inputs_embeds=generator_inputs.generator_input_embeddings,
                             attention_mask=generator_inputs.generator_attention_mask,
                             decoder_input_ids=generator_inputs.generator_decoder_input_ids,
                             return_dict=True)
-        
+   
         logits = generator_outputs.logits
 
         loss_dict = self.get_loss(
@@ -359,6 +488,8 @@ class RagModel(pl.LightningModule):
                         loss_dict=loss_dict,
                         doc_scores=doc_scores.cpu().detach().numpy())
 
+        
+        
 
     def generate(self, input_ids: torch.Tensor,
                       attention_mask: torch.Tensor,
