@@ -14,7 +14,7 @@ from torch.utils.checkpoint import checkpoint
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 from collections import Counter, defaultdict
 from easydict import EasyDict
-from transformers import T5Tokenizer, T5ForConditionalGeneration, T5Config, T5PreTrainedModel
+from transformers import T5Tokenizer, T5Config,T5ForConditionalGeneration, T5PreTrainedModel #
 from transformers import VisualBertModel, VisualBertConfig, BertTokenizer
 from transformers import DPRQuestionEncoder, DPRContextEncoder, DPRConfig
 from transformers import BertModel, BertConfig
@@ -24,6 +24,8 @@ import numpy as np
 import torch.nn.functional as F
 
 import time
+import sys
+
 
 class RagModel(pl.LightningModule):
     '''
@@ -67,14 +69,14 @@ class RagModel(pl.LightningModule):
         else:
             self.retrieve = self.main_retrieve
 
-        # self.num_attention_heads = 12
-        # self.hidden_size = 1024
-        # self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
-        # self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.num_attention_heads = 12
+        self.hidden_size = 1024
+        self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        # self.query = nn.Linear(self.hidden_size, self.all_head_size)
-        # self.key = nn.Linear(self.hidden_size, self.all_head_size)
-        # self.value = nn.Linear(self.hidden_size, self.all_head_size)
+        self.query = nn.Linear(self.hidden_size, self.all_head_size)
+        self.key = nn.Linear(self.hidden_size, self.all_head_size)
+        self.value = nn.Linear(self.hidden_size, self.all_head_size)
     
 
     def init_retrieval(self):
@@ -351,12 +353,19 @@ class RagModel(pl.LightningModule):
         
         attention_probs = nn.Softmax(dim=-1)(attention_scores2) #[5,12,1,L]
 
+        knowledge_mask = knowledge_mask.sum(-1)
+        knowledge_mask = knowledge_mask.unsqueeze(-2)
+        attention_probs = knowledge_mask * attention_probs
         attention_probs2 = attention_probs.clone()
+
         attention_probs2[:,:,:,:len(input_text_ids)] = 1
         attention_probs2 = attention_probs2.mean(-3).transpose(-1, -2)  #[5,L,1]
+
+ 
+
         # print(attention_probs2.sum(-2))
         
-        output_embeddings = attention_probs2 * value_layer
+        output_embeddings = attention_probs2 * value_layer 
 
         # extended_input_text_sequences = []
         # extended_input_text_sequences.extend(input_text_sequences)
