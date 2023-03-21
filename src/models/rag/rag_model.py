@@ -288,6 +288,7 @@ class RagModel(pl.LightningModule):
                                     max_length=self.config.data_loader.additional.max_decoder_source_length,
                                     truncation=True,
                                     return_tensors="pt")
+
         generator_input_ids, generator_attention_mask = encoding.input_ids, encoding.attention_mask
         generator_input_ids = generator_input_ids.to(labels.device)
         generator_attention_mask = generator_attention_mask.to(labels.device)
@@ -464,18 +465,46 @@ class RagModel(pl.LightningModule):
         generator_inputs = self.prepare_inputs_for_generator(input_text_sequences=input_text_sequences,
                                             retrieved_docs=retrieved_docs,
                                             labels=labels, n_docs=n_docs)
+        
+
         # generator_inputs = self.prepare_inputs_for_generator_by_preprocessDoc(input_text_sequences=input_text_sequences,
         #                             retrieved_docs=retrieved_docs,
         #                             labels=labels, n_docs=n_docs)
         
-   
         generator_outputs = self.generator(
                             input_ids=generator_inputs.generator_input_ids,
                             # inputs_embeds=generator_inputs.generator_input_embeddings,
                             attention_mask=generator_inputs.generator_attention_mask,
                             decoder_input_ids=generator_inputs.generator_decoder_input_ids,
                             return_dict=True)
-   
+
+
+        # #################################
+        # # Get encoder outputs first
+        # test_batch = EasyDict({
+        #     'input_ids': generator_inputs.generator_input_ids,
+        #     'attention_mask': generator_inputs.generator_attention_mask,
+        #     'return_dict': True,
+        # })
+
+        # encoder_outputs = self.generator.encoder(
+        #     **test_batch
+        # )
+        # print(input_text_sequences)
+        # print(generator_inputs.generator_input_ids)
+
+        # text_end = torch.nonzero(generator_inputs.generator_input_ids==32102)
+        # print(text_end)
+        
+        # encoder_outputs['last_hidden_state'] = encoder_outputs[0][:,:text_end[0][1],:] #text_end[0][1]+1
+
+        # # input_text_sequences.shape
+        # generator_outputs = self.generator(
+        #                     encoder_outputs=encoder_outputs, # use pre-computed encoder outputs
+        #                     decoder_input_ids=generator_inputs.generator_decoder_input_ids,
+        #                     return_dict=True)
+        # #######################################
+
         logits = generator_outputs.logits
 
         loss_dict = self.get_loss(
@@ -513,7 +542,13 @@ class RagModel(pl.LightningModule):
         # Retrieve docs for given question inputs
         retrieval_results = self.retrieve(input_ids, attention_mask, labels, question_ids, input_text_sequences)
         retrieved_docs, doc_scores = retrieval_results.retrieved_docs, retrieval_results.doc_scores
-        
+        # print(doc_scores)
+        # doc_scores_mean = torch.mean(doc_scores,-1).unsqueeze(-1)
+        # print(doc_scores_mean)
+        # print(doc_scores-doc_scores_mean)
+
+
+
 
         if n_docs is None:
             n_docs = self.config.data_loader.additional.num_knowledge_passages
@@ -547,6 +582,10 @@ class RagModel(pl.LightningModule):
             "max_length": self.config.data_loader.additional.max_target_length,
         }
         generation_outputs = self.generator.generate(**test_batch)
+
+        # generation_outputs_decoded = self.generator_tokenizer.batch_decode(generation_outputs, skip_special_tokens=True)
+        # print(generation_outputs_decoded)
+        # exit()
         
 
         # Find answer proposals from n_docs outputs for each question
@@ -574,6 +613,8 @@ class RagModel(pl.LightningModule):
                 outputs.append(generation_outputs[b, top_cand_inds])
 
             outputs = torch.cat(outputs)
+            doc_scores_log = -F.log_softmax(doc_scores, dim=-1)
+            loss_with_doc_scores = doc_scores_log
 
         else:
             # Re-forward the generator, and use generation outputs as labels
@@ -642,9 +683,38 @@ class RagModel(pl.LightningModule):
                     outputs.append(generation_outputs[b, top_cand_inds])
 
                 outputs = torch.cat(outputs)
-                
+
+                loss_with_doc_scores = loss.sum(-1)
+
+            elif 'loss_and_voting' in self.config.model_config.modules:
+
+                n_cands = 5
+
+                doc_scores_log = -F.log_softmax(doc_scores, dim=-1)
+                loss_with_doc_scores = doc_scores_log + (loss.sum(-1))
+
+                for b in range(batch_size):
+                    # use topk to get indices of top candidates
+                    top_cand_inds = (-loss_with_doc_scores[b]).topk(n_cands)[1]
+                    answer_proposals = self.generator_tokenizer.batch_decode(generation_outputs[b, top_cand_inds], skip_special_tokens=True)
+
+                    counter = Counter()
+                    index_dict = {}
+                    for index, p in enumerate(answer_proposals):
+                        index_dict.setdefault(p, index)
+                    counter = Counter(answer_proposals)
+                    top_proposals = [x[0] for x in counter.most_common(1)]
+                    top_cand_inds = [index_dict[p] for p in top_proposals]
+
+                    outputs.append(generation_outputs[b, top_cand_inds])
+
+                    generation_outputs_for_docs.append(answer_proposals)
+
+                outputs = torch.cat(outputs)
+                print(outputs)
 
             else:
+
                 ################################
                 # mean over tokens for each doc
                 ################################
@@ -669,9 +739,12 @@ class RagModel(pl.LightningModule):
                 # loss --> -log(p(y|x, z))
                 # -log(g(z)p(y|x, z)) = -doc_scores + loss
                 # batch_size x n_docs + batch_size x n_docs
-                
-                doc_scores_log = -F.log_softmax(doc_scores, dim=-1)
-                loss_with_doc_scores = doc_scores_log + (loss.sum(-1))
+                ################################
+
+
+                # doc_scores_log = -F.log_softmax(doc_scores, dim=-1)
+                # loss_with_doc_scores = doc_scores_log + (loss.sum(-1))
+                loss_with_doc_scores = loss.sum(-1)
 
                 for b in range(batch_size):
                     # use topk to get indices of top candidates
@@ -679,11 +752,14 @@ class RagModel(pl.LightningModule):
 
                     outputs.append(generation_outputs[b, top_cand_inds])
                     answer_proposals = generation_outputs_decoded[b*n_docs:(b+1)*n_docs]
+
                     generation_outputs_for_docs.append(answer_proposals)
                     # print(-loss[b])
                     # print(answer_proposals)
 
                 outputs = torch.cat(outputs)
+
+
 
         return EasyDict(outputs=outputs, 
                         retrieved_docs=retrieved_docs, 

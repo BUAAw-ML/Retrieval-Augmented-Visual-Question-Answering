@@ -40,7 +40,7 @@ local override = {
     
     "GeneratorModelClass": "T5ForConditionalGeneration", // answer generator
     "GeneratorConfigClass": "T5Config",
-    "GeneratorModelVersion": "t5-large",
+    "GeneratorModelVersion": "t5-large", // ../public/flan-t5-xl
     "pretrained": 1,
     "modules": [
     ],

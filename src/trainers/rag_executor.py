@@ -51,6 +51,7 @@ class RagExecutor(BaseExecutor):
 
     
     def configure_optimizers(self):
+
         """
         Return optimizers and schedulers
         """
@@ -66,9 +67,9 @@ class RagExecutor(BaseExecutor):
             # Freeze generator
             print('freeze generator!')
             for n, p in self.model.named_parameters():
-                if 'generator' in n:
+                if 'generator' in n and 'generator.encoder.block.0' not in n:
                     p.requires_grad = False
-                # print(n, p.requires_grad)
+                print(n, p.requires_grad)
         
 
         if self.config.train.retriever_lr != self.config.train.lr:
