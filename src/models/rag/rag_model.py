@@ -836,6 +836,8 @@ class RagModel(pl.LightningModule):
 
         nll_loss = -ll
         loss_dict.nll_loss = nll_loss
+        print(nll_loss.mean(-1))
+        print(loss_dict)
 
         if self.config.model_config.loss_ratio.additional_loss != 0:
             if retrieval_labels is not None:

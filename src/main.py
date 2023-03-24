@@ -34,8 +34,8 @@ from data_loader_manager import *
 from trainers import *
 
 os.environ["WANDB_API_KEY"] = '5f6441f28ae646c7c74337b84e80d414fb20bb80' # 将引号内的+替换成自己在wandb上的一串值
-# os.environ["WANDB_MODE"] = "dryrun"   
-# os.environ["WANDB_MODE"] = 'offline'#"dryrun"   
+os.environ["WANDB_MODE"] = "dryrun"   
+os.environ["WANDB_MODE"] = 'offline'#"dryrun"   
 
 
 def get_checkpoint_model_path(saved_model_path, load_epoch=-1, load_best_model=False, load_model_path=""):
@@ -220,6 +220,7 @@ def initialization(args):
         else:
             print("reset cancelled.")
 
+
     create_dirs(dirs)
     print(dirs)
 
@@ -280,19 +281,19 @@ def initialization(args):
     config.WANDB.tags.extend(config.model_config.modules)
 
     # print(os.environ["WANDB_MODE"])
-    all_runs = wandb.Api(timeout=19).runs(path=f'{config.WANDB.entity}/{config.WANDB.project}',  filters={"config.experiment_name": config.experiment_name})
-    if config.reset and config.mode == "train" and delete_confirm == 'y':
-        for run in all_runs:
-            logger.info(f'Deleting wandb run: {run}')
-            run.delete()
-        config.WANDB.name=config.experiment_name
-    else:
-        if len(all_runs) > 0:
-            config.WANDB.id=all_runs[0].id
-            config.WANDB.resume="must"
-            config.WANDB.name=config.experiment_name
-        else:
-            config.WANDB.name=config.experiment_name
+    # all_runs = wandb.Api(timeout=19).runs(path=f'{config.WANDB.entity}/{config.WANDB.project}',  filters={"config.experiment_name": config.experiment_name})
+    # if config.reset and config.mode == "train" and delete_confirm == 'y':
+    #     for run in all_runs:
+    #         logger.info(f'Deleting wandb run: {run}')
+    #         run.delete()
+    #     config.WANDB.name=config.experiment_name
+    # else:
+    #     if len(all_runs) > 0:
+    #         config.WANDB.id=all_runs[0].id
+    #         config.WANDB.resume="must"
+    #         config.WANDB.name=config.experiment_name
+    #     else:
+    #         config.WANDB.name=config.experiment_name
     ######################
     
     # if wandb.run.resumed:
