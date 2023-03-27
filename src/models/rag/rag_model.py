@@ -43,16 +43,16 @@ class RagModel(pl.LightningModule):
         # Initialising question encoder
         QueryEncoderModelClass = globals()[self.config.model_config.QueryEncoderModelClass]
         QueryEncoderConfigClass = globals()[self.config.model_config.QueryEncoderConfigClass]
-        question_encoder_model_config = QueryEncoderConfigClass.from_pretrained(self.config.model_config.QueryEncoderModelVersion, cache_dir="../public") #, cache_dir="../public"
-        self.question_encoder = QueryEncoderModelClass.from_pretrained(self.config.model_config.QueryEncoderModelVersion, cache_dir="../public",
+        question_encoder_model_config = QueryEncoderConfigClass.from_pretrained(self.config.model_config.QueryEncoderModelVersion, local_files_only=True, cache_dir="../public") #, cache_dir="../public"
+        self.question_encoder = QueryEncoderModelClass.from_pretrained(self.config.model_config.QueryEncoderModelVersion,local_files_only=True,  cache_dir="../public",
                                                     config=question_encoder_model_config)
         self.retiever_hidden_size = question_encoder_model_config.hidden_size
 
         # Initialising generator
         GeneratorModelClass = globals()[self.config.model_config.GeneratorModelClass]
         GeneratorConfigClass = globals()[self.config.model_config.GeneratorConfigClass]
-        generator_model_config = GeneratorConfigClass.from_pretrained(self.config.model_config.GeneratorModelVersion, cache_dir="../public")
-        self.generator = GeneratorModelClass.from_pretrained(self.config.model_config.GeneratorModelVersion, cache_dir="../public",
+        generator_model_config = GeneratorConfigClass.from_pretrained(self.config.model_config.GeneratorModelVersion,local_files_only=True,  cache_dir="../public")
+        self.generator = GeneratorModelClass.from_pretrained(self.config.model_config.GeneratorModelVersion, local_files_only=True, cache_dir="../public",
                                                     config=generator_model_config)
         
         self.question_encoder.resize_token_embeddings(len(self.retriever_tokenizer))
@@ -742,9 +742,9 @@ class RagModel(pl.LightningModule):
                 ################################
 
 
-                # doc_scores_log = -F.log_softmax(doc_scores, dim=-1)
-                # loss_with_doc_scores = doc_scores_log + (loss.sum(-1))
-                loss_with_doc_scores = loss.sum(-1)
+                doc_scores_log = -F.log_softmax(doc_scores, dim=-1)
+                loss_with_doc_scores = doc_scores_log + (loss.sum(-1))
+                # loss_with_doc_scores = loss.sum(-1)
 
                 for b in range(batch_size):
                     # use topk to get indices of top candidates
@@ -836,8 +836,7 @@ class RagModel(pl.LightningModule):
 
         nll_loss = -ll
         loss_dict.nll_loss = nll_loss
-        print(nll_loss.mean(-1))
-        print(loss_dict)
+
 
         if self.config.model_config.loss_ratio.additional_loss != 0:
             if retrieval_labels is not None:
@@ -903,14 +902,24 @@ class RagModel(pl.LightningModule):
                 loss_dict.additional_loss = dist_loss
             else:
                 loss_dict.additional_loss = 0
-        
-        if reduce_loss:
-            mask = (pad_mask == 0)
-            nll_loss = nll_loss.sum()
-            nll_loss = nll_loss / torch.sum(mask)
-            loss_dict.nll_loss = nll_loss
 
-            
+
+        if reduce_loss:
+
+
+            # mask = (pad_mask == 0)
+            # nll_loss = nll_loss.sum()
+            # nll_loss = nll_loss / torch.sum(mask)
+            # loss_dict.nll_loss = nll_loss
+
+            remove_querys = 10
+            mask = (pad_mask == 0)
+            sort_res, _ = torch.sort(nll_loss.mean(-1),descending=True)#
+            res =nll_loss.mean(-1) > sort_res[:,nll_loss.shape[1]-remove_querys]
+            nll_loss *= res.unsqueeze(-1)
+            nll_loss = nll_loss.sum()
+            nll_loss = nll_loss / (torch.sum(mask)-mask.shape[-2] * remove_querys)
+            loss_dict.nll_loss = nll_loss
 
         return loss_dict
         
