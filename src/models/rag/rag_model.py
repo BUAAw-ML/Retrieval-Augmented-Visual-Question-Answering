@@ -274,14 +274,15 @@ class RagModel(pl.LightningModule):
 
         for index, input_text_sequence in enumerate(input_text_sequences):
             scores = []
-            # extended_input_text_sequences.append(input_text_sequence)
-            # scores.append(0)
             for doc in retrieved_docs[index]:#[:-1]:
                 extended_input_text_sequences.append(
                     ' '.join([input_text_sequence, doc['content']])
                 )
                 scores.append(doc['score'])
+            # extended_input_text_sequences.append(input_text_sequence)
+            # scores.append(0)
         
+
         targets = labels
 
         encoding = self.generator_tokenizer([sequence for sequence in extended_input_text_sequences],
@@ -292,6 +293,7 @@ class RagModel(pl.LightningModule):
 
         generator_input_ids, generator_attention_mask = encoding.input_ids, encoding.attention_mask
         generator_input_ids = generator_input_ids.to(labels.device)
+
         generator_attention_mask = generator_attention_mask.to(labels.device)
         generator_decoder_input_ids = self.generator._shift_right(targets)
 
@@ -878,12 +880,23 @@ class RagModel(pl.LightningModule):
                     # correct prediction + negative pseudo label = -100
                     # wrong prediction + negative pseudo label = 0
 
-                    # prediction_res = prediction_labels[0][0].unsqueeze(-1).unsqueeze(-1)
-                    # # print(prediction_res != prediction_labels)
-                    # good_labels =  torch.logical_and((prediction_labels[0][0]==0),(prediction_res != prediction_labels))
+                    # prediction_res = prediction_labels[0][-1].unsqueeze(-1).unsqueeze(-1)
+
+                    # good_labels =  torch.logical_and((prediction_labels[0][-1]==0),(prediction_res != prediction_labels))
                     # merged_labels =  torch.logical_and(good_labels,retrieval_labels).float()
                     # ignore_m = (prediction_res == prediction_labels)
-                    # ignore_mask = ignore_m | torch.logical_and(good_labels,(retrieval_labels==0))
+                    # ignore_m = ignore_m | torch.logical_and((good_labels==0),(retrieval_labels==1))
+                    # ignore_mask = ignore_m | torch.logical_and((good_labels==1),(retrieval_labels==0))
+
+                    # merged_labels =  torch.logical_and((prediction_labels[0][-1]==0),(prediction_res != prediction_labels)).float()
+                    # ignore_mask = (prediction_res == prediction_labels)
+
+
+                    # input_loss = nll_loss.mean(-1)
+                    # good_labels = torch.logical_and(((input_loss - input_loss[0][-1]) < 0),torch.logical_and(prediction_labels, retrieval_labels))
+                    # bad_labels = torch.logical_and(((input_loss - input_loss[0][-1]) > 0),torch.logical_and((prediction_labels==0), (retrieval_labels==0)))
+                    # ignore_mask = torch.logical_and(~good_labels, ~bad_labels)
+                    # merged_labels = good_labels.float()
 
                     merged_labels = torch.logical_and(prediction_labels, retrieval_labels).float()
                     ignore_mask = torch.logical_or(
@@ -897,18 +910,19 @@ class RagModel(pl.LightningModule):
                     merged_labels = prediction_labels.float()
                     ignore_mask = torch.zeros_like(merged_labels).bool().to(merged_labels.device)
 
+                # doc_scores_softmaxed = F.softmax(doc_scores[:,:-1], dim=-1)
+                # dist_loss = F.binary_cross_entropy(doc_scores_softmaxed, merged_labels[:,:-1], reduction='none')
+                # dist_loss.masked_fill_(ignore_mask[:,:-1], 0.0)   
+
                 doc_scores_softmaxed = F.softmax(doc_scores, dim=-1)
-
-
                 dist_loss = F.binary_cross_entropy(doc_scores_softmaxed, merged_labels, reduction='none')
-                dist_loss.masked_fill_(ignore_mask, 0.0)    
+                dist_loss.masked_fill_(ignore_mask, 0.0)
 
-
-                remove_querys = 15
-                sort_res, _ = torch.sort(dist_loss,descending=True)#
-                res =dist_loss > sort_res[:,dist_loss.shape[1]-remove_querys]
-                # # res *= dist_loss < sort_res[:,2]
-                dist_loss *= res
+                # remove_querys = 3
+                # sort_res, _ = torch.sort(dist_loss,descending=True)#
+                # res =dist_loss > sort_res[:,dist_loss.shape[1]-remove_querys]
+                # # # res *= dist_loss < sort_res[:,2]
+                # dist_loss *= res
 
                 count_nonzero = torch.count_nonzero(dist_loss)
                 if count_nonzero == 0:
@@ -923,14 +937,15 @@ class RagModel(pl.LightningModule):
 
         if reduce_loss:
 
-            # mask = (pad_mask == 0)
-            # nll_loss = nll_loss.sum()
-            # nll_loss = nll_loss / torch.sum(mask)
-            # loss_dict.nll_loss = nll_loss
+            mask = (pad_mask == 0)
+            nll_loss = nll_loss.sum()
+            nll_loss = nll_loss / torch.sum(mask)
+            loss_dict.nll_loss = nll_loss
+
+
 
             # k_labels = merged_labels.clone()
             # # k_labels[:,0] = 1.0
-
             # if k_labels.sum() != 0:
             #     mask = (pad_mask == 0)
             #     nll_loss = (nll_loss*k_labels.unsqueeze(-1)).sum()
@@ -939,21 +954,41 @@ class RagModel(pl.LightningModule):
             # else:
             #     loss_dict.nll_loss = (nll_loss*k_labels.unsqueeze(-1)).sum()
 
+
             # mask = (pad_mask == 0)
-            # nll_loss = nll_loss[:,1:,:].sum()
+            # nll_loss = nll_loss[:,:-1,:].sum()
             # nll_loss = nll_loss / (torch.sum(mask) - mask.shape[-2] )
             # loss_dict.nll_loss = nll_loss
+            
 
-            # remove_querys = 10
-            mask = (pad_mask == 0)
-            sort_res, _ = torch.sort(nll_loss.mean(-1) * (~res), descending=True)
-            res2 =nll_loss.mean(-1)  * (~res) > sort_res[:,nll_loss.shape[1]-remove_querys - res.sum()]
+            # mask = (pad_mask == 0)
+            # sort_res, _ = torch.sort(nll_loss.mean(-1) * (~res), descending=True)
+            # res2 =nll_loss.mean(-1)  * (~res) > sort_res[:,nll_loss.shape[1]-remove_querys - res.sum()]
+            # nll_loss *= (res2 | res).unsqueeze(-1)
+            # nll_loss = nll_loss.sum()
+            # nll_loss = nll_loss / (torch.sum(mask)-mask.shape[-2] * remove_querys)
+            # loss_dict.nll_loss = nll_loss
 
-            nll_loss *= (res2 | res).unsqueeze(-1)
-            nll_loss = nll_loss.sum()
-            nll_loss = nll_loss / (torch.sum(mask)-mask.shape[-2] * remove_querys)
+            # nll_loss = nll_loss[:,:-1,:]
+            # remove_querys = 1
+            # mask = (pad_mask == 0)
+            # sort_res, _ = torch.sort(nll_loss.mean(-1), descending=True)
+            # res2 =nll_loss.mean(-1) > sort_res[:,nll_loss.shape[1]-remove_querys]
+            # nll_loss *= res2.unsqueeze(-1)
+            # nll_loss = nll_loss.sum()
+            # nll_loss = nll_loss / (torch.sum(mask)-mask.shape[-2] * (remove_querys+1))
+            # loss_dict.nll_loss = nll_loss
 
-            loss_dict.nll_loss = nll_loss
+
+            # remove_querys = 2
+            # mask = (pad_mask == 0)
+            # sort_res, _ = torch.sort(nll_loss.mean(-1), descending=True)
+            # res2 =nll_loss.mean(-1) > sort_res[:,nll_loss.shape[1]-remove_querys]
+            # nll_loss *= res2.unsqueeze(-1)
+            # nll_loss = nll_loss.sum()
+            # nll_loss = nll_loss / (torch.sum(mask)-mask.shape[-2] * remove_querys)
+            # loss_dict.nll_loss = nll_loss
+
 
         return loss_dict
         
