@@ -274,13 +274,13 @@ class RagModel(pl.LightningModule):
 
         for index, input_text_sequence in enumerate(input_text_sequences):
             scores = []
-            for doc in retrieved_docs[index]:#[:-1]:
+            for doc in retrieved_docs[index][:-1]:
                 extended_input_text_sequences.append(
                     ' '.join([input_text_sequence, doc['content']])
                 )
                 scores.append(doc['score'])
-            # extended_input_text_sequences.append(input_text_sequence)
-            # scores.append(0)
+            extended_input_text_sequences.append(input_text_sequence)
+            scores.append(0)
         
 
         targets = labels
@@ -746,9 +746,9 @@ class RagModel(pl.LightningModule):
                 ################################
 
 
-                doc_scores_log = -F.log_softmax(doc_scores, dim=-1)
-                loss_with_doc_scores = doc_scores_log + (loss.sum(-1))
-                # loss_with_doc_scores = loss.sum(-1)
+                # doc_scores_log = -F.log_softmax(doc_scores, dim=-1)
+                # loss_with_doc_scores = doc_scores_log + (loss.sum(-1))
+                loss_with_doc_scores = loss.sum(-1)
 
                 for b in range(batch_size):
                     # use topk to get indices of top candidates
@@ -892,17 +892,17 @@ class RagModel(pl.LightningModule):
                     # ignore_mask = (prediction_res == prediction_labels)
 
 
-                    # input_loss = nll_loss.mean(-1)
-                    # good_labels = torch.logical_and(((input_loss - input_loss[0][-1]) < 0),torch.logical_and(prediction_labels, retrieval_labels))
-                    # bad_labels = torch.logical_and(((input_loss - input_loss[0][-1]) > 0),torch.logical_and((prediction_labels==0), (retrieval_labels==0)))
-                    # ignore_mask = torch.logical_and(~good_labels, ~bad_labels)
-                    # merged_labels = good_labels.float()
+                    input_loss = nll_loss.mean(-1)
+                    good_labels = torch.logical_and(((input_loss - input_loss[0][-1]) < 0),torch.logical_and(prediction_labels, retrieval_labels))
+                    bad_labels = torch.logical_and(((input_loss - input_loss[0][-1]) > 0),torch.logical_and((prediction_labels==0), (retrieval_labels==0)))
+                    ignore_mask = torch.logical_and(~good_labels, ~bad_labels)
+                    merged_labels = good_labels.float()
 
-                    merged_labels = torch.logical_and(prediction_labels, retrieval_labels).float()
-                    ignore_mask = torch.logical_or(
-                        torch.logical_and((prediction_labels==0), (retrieval_labels==1)),
-                        torch.logical_and((prediction_labels==1), (retrieval_labels==0)),
-                        )
+                    # merged_labels = torch.logical_and(prediction_labels, retrieval_labels).float()
+                    # ignore_mask = torch.logical_or(
+                    #     torch.logical_and((prediction_labels==0), (retrieval_labels==1)),
+                    #     torch.logical_and((prediction_labels==1), (retrieval_labels==0)),
+                    #     )
                 elif RAVQA_loss_type == 'NoPR':
                     ##############   approach NoPR:  ##################
                     # correct prediction = 1
@@ -910,13 +910,14 @@ class RagModel(pl.LightningModule):
                     merged_labels = prediction_labels.float()
                     ignore_mask = torch.zeros_like(merged_labels).bool().to(merged_labels.device)
 
-                # doc_scores_softmaxed = F.softmax(doc_scores[:,:-1], dim=-1)
-                # dist_loss = F.binary_cross_entropy(doc_scores_softmaxed, merged_labels[:,:-1], reduction='none')
-                # dist_loss.masked_fill_(ignore_mask[:,:-1], 0.0)   
 
-                doc_scores_softmaxed = F.softmax(doc_scores, dim=-1)
-                dist_loss = F.binary_cross_entropy(doc_scores_softmaxed, merged_labels, reduction='none')
-                dist_loss.masked_fill_(ignore_mask, 0.0)
+                doc_scores_softmaxed = F.softmax(doc_scores[:,:-1], dim=-1)
+                dist_loss = F.binary_cross_entropy(doc_scores_softmaxed, merged_labels[:,:-1], reduction='none')
+                dist_loss.masked_fill_(ignore_mask[:,:-1], 0.0)   
+
+                # doc_scores_softmaxed = F.softmax(doc_scores, dim=-1)
+                # dist_loss = F.binary_cross_entropy(doc_scores_softmaxed, merged_labels, reduction='none')
+                # dist_loss.masked_fill_(ignore_mask, 0.0)
 
                 # remove_querys = 3
                 # sort_res, _ = torch.sort(dist_loss,descending=True)#
@@ -943,7 +944,6 @@ class RagModel(pl.LightningModule):
             loss_dict.nll_loss = nll_loss
 
 
-
             # k_labels = merged_labels.clone()
             # # k_labels[:,0] = 1.0
             # if k_labels.sum() != 0:
@@ -953,7 +953,6 @@ class RagModel(pl.LightningModule):
             #     loss_dict.nll_loss = nll_loss
             # else:
             #     loss_dict.nll_loss = (nll_loss*k_labels.unsqueeze(-1)).sum()
-
 
             # mask = (pad_mask == 0)
             # nll_loss = nll_loss[:,:-1,:].sum()
@@ -970,7 +969,7 @@ class RagModel(pl.LightningModule):
             # loss_dict.nll_loss = nll_loss
 
             # nll_loss = nll_loss[:,:-1,:]
-            # remove_querys = 1
+            # remove_querys = 2
             # mask = (pad_mask == 0)
             # sort_res, _ = torch.sort(nll_loss.mean(-1), descending=True)
             # res2 =nll_loss.mean(-1) > sort_res[:,nll_loss.shape[1]-remove_querys]
